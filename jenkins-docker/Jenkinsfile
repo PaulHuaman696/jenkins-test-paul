@@ -1,0 +1,142 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        ansiColor('xterm')
+        timeout(time: 30, unit: 'MINUTES')
+    }
+
+    environment {
+        DOCKER_IMAGE = 'jenkins-test-image'
+        DOCKER_TAG = "${env.BUILD_NUMBER}"
+    }
+
+    parameters {
+        string(name: 'GIT_REPO', defaultValue: 'https://github.com/docker/awesome-compose.git', description: 'Repositorio Git para clonar')
+        string(name: 'GREETING', defaultValue: 'Hello', description: 'Saludo')
+    }
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+                echo "=== Probando plugin Git ==="
+                git branch: 'master', 
+                    credentialsId: 'github-credentials', 
+                    url: params.GIT_REPO
+                sh 'git rev-parse --short HEAD > commit.txt'
+                script {
+                    def commit = readFile('commit.txt').trim()
+                    echo "Commit actual: ${commit}"
+                    env.GIT_COMMIT_SHORT = commit
+                }
+            }
+        }
+
+        stage('Create Mock App') {
+            steps {
+                echo "=== Creando mock-app para test Docker ==="
+                sh '''
+                    mkdir -p mock-app
+                    cat > mock-app/Dockerfile << 'EOF'
+FROM nginx:alpine
+RUN echo "<!DOCTYPE html><html><body><h1>Jenkins Docker Test OK!</h1></body></html>" > /usr/share/nginx/html/index.html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+EOF
+                '''
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                echo "=== Probando plugin Docker ==="
+                dir('mock-app') {
+                    sh "docker build -t ${env.DOCKER_IMAGE}:${env.DOCKER_TAG} ."
+                }
+            }
+        }
+
+        stage('Docker Run & Test') {
+            steps {
+                echo "=== Probando Docker ejecución ==="
+                sh """
+                    docker rm -f test-container-${env.BUILD_NUMBER} 2>/dev/null || true
+                    docker run -d --name test-container-${env.BUILD_NUMBER} -p 8888:80 ${env.DOCKER_IMAGE}:${env.DOCKER_TAG}
+                    sleep 3
+                    docker stop test-container-${env.BUILD_NUMBER}
+                    docker rm test-container-${env.BUILD_NUMBER}
+                """
+            }
+        }
+
+        stage('Job DSL - Crear Job Dinamico') {
+            steps {
+                echo "=== Probando plugin Job DSL ==="
+                script {
+                    def dslScript = """
+job("test-dsl-job-${env.BUILD_NUMBER}") {
+    description('Job creado dinámicamente via DSL')
+    parameters {
+        stringParam('PARAM_NAME', 'default', 'Parametro de prueba')
+    }
+    steps {
+        shell('echo "Job DSL ejecutandose correctamente"')
+    }
+}
+"""
+                    jobDsl scriptText: dslScript, removedJobAction: 'DELETE', lookupStrategy: 'JENKINS_ROOT'
+                    echo "Job DSL creado exitosamente"
+                }
+            }
+        }
+
+        stage('Credentials Test') {
+            steps {
+                echo "=== Probando plugin Credentials ==="
+                withCredentials([usernamePassword(credentialsId: 'test-creds', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                    echo "Credenciales cargadas (no mostrar valores)"
+                    sh 'echo "Username: $USER"'
+                }
+            }
+        }
+
+        stage('BlueOcean/UI Features') {
+            steps {
+                echo "=== Probando features de UI (BlueOcean, AnsiColor, Timestamper) ==="
+                echo "${params.GREETING} desde Jenkins Pipeline!"
+                sh '''
+                    echo -e "\\x1b[32mTexto verde (AnsiColor)\\x1b[0m"
+                    echo -e "\\x1b[34mTexto azul\\x1b[0m"
+                    echo -e "\\x1b[31mTexto rojo\\x1b[0m"
+                '''
+            }
+        }
+
+        stage('Pipeline Stage View') {
+            steps {
+                echo "=== Verificando Pipeline Stage View ==="
+                echo "Este pipeline tiene multiples stages visibles en la vista"
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "=== Limpieza ==="
+            script {
+                sh "docker rm -f test-container-${env.BUILD_NUMBER} 2>/dev/null || true"
+                if (env.DOCKER_IMAGE) {
+                    sh "docker rmi ${env.DOCKER_IMAGE}:${env.DOCKER_TAG} 2>/dev/null || true"
+                }
+            }
+            deleteDir()
+        }
+        success {
+            echo "Pipeline completado exitosamente!"
+        }
+        failure {
+            echo "Pipeline falló!"
+        }
+    }
+}

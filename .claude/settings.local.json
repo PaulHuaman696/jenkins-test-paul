@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.jenkins.io)",
+      "WebFetch(domain:stack.watch)"
+    ]
+  }
+}

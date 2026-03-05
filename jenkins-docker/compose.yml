@@ -1,0 +1,22 @@
+services:
+  jenkins:
+    build:
+      context: .
+      args:
+        JENKINS_VERSION: ${JENKINS_VERSION}
+    ports:
+      - "${JENKINS_HTTP_PORT}:8080"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - ./Jenkinsfile:/var/jenkins_home/jenkinsfile/Jenkinsfile:ro
+      - ./init.groovy.d:/var/jenkins_home/init.groovy.d:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+    user: root
+    privileged: true
+    command: >
+      bash -c "usermod -aG docker jenkins && /bin/tini -s -- /usr/local/bin/jenkins.sh"
+
+volumes:
+  jenkins_home:
