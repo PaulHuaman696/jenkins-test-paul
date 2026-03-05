@@ -143,3 +143,4 @@ UnknownAttributesException: Invalid configuration elements for type: ... : scrip
 
 Esto ocurre porque el plugin `configuration-as-code` no soporta la configuración de `scriptApproval` en la versión actual.
 
+
