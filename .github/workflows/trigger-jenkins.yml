@@ -13,6 +13,5 @@ jobs:
         run: |
           curl -X POST \
             --user "admin:${{ secrets.JENKINS_TOKEN }}" \
-            "${{ secrets.JENKINS_URL }}/job/test-pipeline-v2/buildWithParameters" \
-            -H "ngrok-skip-browser-warning: true" \
-            --data ''
+            "${{ secrets.JENKINS_URL }}/job/test-pipeline-v2/build" \
+            -H "ngrok-skip-browser-warning: true"
